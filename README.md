@@ -1,205 +1,256 @@
 # Kiln
 
-**Claude Code の「目」と「構造化入力」を提供するインターフェース**
+> 日本語版: [README.ja.md](./README.ja.md)
 
-Kiln 自体はコードを生成しない。判断もしない。
-**見ること**と**構造的にやり取りすること**だけに徹する。
+**Eyes and structured input for Claude Code.**
+
+Kiln is a small local dashboard that you add to a project as a git submodule.
+It lets you *see* UI variants that Claude Code generated and give *structured*
+feedback (adopt / iterate / keep / drop) that Claude Code can act on.
+
+Kiln itself does not generate code and does not make decisions. It only does
+two things: show, and exchange structured input.
 
 ```
-Claude Code（主体・実行者）
+Claude Code (the actor)
   │
-  ├── テキスト CLI で十分なこと → そのまま対話
+  ├── things a text CLI handles fine → plain conversation
   │
-  └── テキストでは伝わらないこと → Kiln が補助
-       ├── バリアントの視覚的プレビュー（見る）
-       └── レビュー判定の構造化入力（やり取りする）
+  └── things text cannot convey → Kiln assists
+       ├── visual preview of variants            (see)
+       └── structured input of review decisions  (exchange)
 ```
 
----
+## Install
 
-## インストール
+Kiln is meant to live inside the project it serves, as `tools/kiln`.
 
 ```bash
-# 1. submodule として追加
-git submodule add <kiln-repo-url> tools/kiln
+# 1. add as a submodule
+git submodule add https://github.com/Socrates10101/kiln.git tools/kiln
 
-# 2. セットアップ（依存・スクリプト・skills・作業ディレクトリ・config 一括）
+# 2. run the installer from the host project root
 tools/kiln/install.sh
 ```
 
-`install.sh` が行うこと：
+What `install.sh` does:
 
-| ステップ | 内容 |
-|----------|------|
-| Dependencies | `tools/kiln/` の `pnpm install` |
-| Package script | ホストの `package.json` に `"kiln"` スクリプトを追加 |
-| Skills | `.claude/skills/` に symlink（Claude Code がスキルを認識する） |
-| Working dir | `.kiln/variants/`, `.kiln/agents/`, `.kiln/.gitignore` を作成 |
-| Config | `kiln.config.ts` をスキャフォールド（存在しなければ） |
+| Step | What happens |
+|------|--------------|
+| Dependencies | runs `pnpm install` inside `tools/kiln/` |
+| Package script | adds a `"kiln": "tsx tools/kiln/src/cli.ts"` script to the host `package.json` (skipped if absent) |
+| Skills | symlinks each `tools/kiln/skills/*` into `.claude/skills/` so Claude Code picks them up |
+| Working dir | creates `.kiln/variants/`, `.kiln/agents/` and `.kiln/.gitignore` (ignores `agents/`) |
+| Config | scaffolds `kiln.config.ts` in the host root if it does not exist |
 
-セットアップ後：
+Requirements: Node 20+, pnpm, python3 (used by the installer to compute relative paths),
+and `tsx` resolvable from the host project (`npx tsx` is used when it is not installed).
+
+After installing:
 
 ```bash
-# kiln.config.ts を自分のプロジェクトに合わせて編集
-vim kiln.config.ts
+# edit the config to match your project
+$EDITOR kiln.config.ts
 
-# 起動
+# start the dashboard
 pnpm kiln
 ```
 
-`http://localhost:4400` で Dashboard が開く。
+The dashboard opens at **http://localhost:4400** (port is configurable).
 
----
+| URL | Purpose |
+|-----|---------|
+| `/` | dashboard |
+| `/preview/:component/:variantId` | full-page preview of one variant |
+| `/preview/group/:groupName` | preview a component group (optionally inside the real page file) |
+| `/api/manifest`, `/api/review`, `/api/agents`, `/api/groups` | JSON read endpoints |
+| `/api/review/:component/:variantId` | `POST` a review decision |
+| `/api/events` | Server-Sent Events stream |
 
-## kiln.config.ts
+## What ends up in your project
 
-```typescript
+```
+my-project/
+  ├── kiln.config.ts                      ← project config (you edit this)
+  ├── tools/kiln/                         ← submodule (do not edit)
+  ├── .kiln/
+  │   ├── variants/                       ← variant files (tracked in git)
+  │   ├── agents/                         ← agent state files (gitignored)
+  │   └── .gitignore                      ← ignores agents/
+  ├── .claude/skills/
+  │   └── variant-review → ../../tools/kiln/skills/variant-review   ← symlink (tracked)
+  └── docs/
+      └── variant-review.json             ← review data (tracked)
+```
+
+## Variant file naming
+
+A variant is a single file named `<Component>.v<generation><slot>.tsx`:
+
+```
+.kiln/variants/HeroSection.v1a.tsx
+.kiln/variants/HeroSection.v1b.tsx
+.kiln/variants/HeroSection.v2a.tsx   ← generated from v1x with feedback
+```
+
+| Part | Meaning |
+|------|---------|
+| `HeroSection` | component name; variants of the same component are grouped |
+| `v1`, `v2`, … | generation; each `iterate` round produces the next generation |
+| `a`, `b`, `c` | slot; sibling variants of the same generation |
+
+The pattern is a regex in `kiln.config.ts` (`variants.pattern`) with three
+capture groups: component, generation, slot. The default is
+`/^(.+)\.v(\d+)([a-z])\.tsx$/`.
+
+Each variant file must `export default` a React component. A JSDoc comment at
+the top gives the variant a human-readable name in the dashboard:
+
+```tsx
+/** v2a: Split Horizon (Gen 2) */
+export default function HeroSection() { … }
+```
+
+Recognised forms are `/** v2a: Name (Gen 2) */`, `/** v2a: Name */` and
+`/** Name -- description */`. Without one, the id (`v2a`) is shown.
+
+## `kiln.config.ts` reference
+
+Every option below exists in `src/config/schema.ts`. `defineConfig` only
+provides types; it returns the object unchanged.
+
+```ts
 import { defineConfig } from './tools/kiln/src/index.js';
 
 export default defineConfig({
   name: 'my-project',
 
-  // バリアントファイルの探索パターン
+  // Variant discovery
   variants: {
-    include: ['.kiln/variants/**/*.v*.tsx'],
-    pattern: /^(.+)\.v(\d+)([a-z])\.tsx$/,
+    include: ['.kiln/variants/**/*.v*.tsx'],   // globs; default ['src/**/*.v*.tsx']
+    pattern: /^(.+)\.v(\d+)([a-z])\.tsx$/,     // 3 groups: component, generation, slot
   },
 
-  // ページ単位のコンポーネントグループ
+  // Optional page-level grouping shown in the dashboard
   groups: [
-    { name: 'Homepage', components: ['HeroSection', 'Footer'] },
+    {
+      name: 'Homepage',
+      components: ['HeroSection', 'Footer'],
+      pageFile: 'src/app/page.tsx',            // optional: render variants inside the real page
+    },
   ],
 
-  // レビューデータの保存先
+  // Where review decisions are persisted (relative to project root)
   review: {
-    file: 'docs/variant-review.json',
+    file: 'docs/variant-review.json',          // default
   },
 
-  // プレビュー描画
+  // Preview rendering
   preview: {
-    framework: 'react',
-    css: ['./src/app/globals.css'],
-    vite: {
+    framework: 'react',                        // the only framework today
+    css: ['./src/app/globals.css'],            // CSS files injected into every preview
+    vite: {                                    // optional extra Vite config
       plugins: [],
-      resolve: { alias: { '@/': './src/' } },
+      resolve: { alias: { '@/': './src/' } },  // relative aliases are resolved from the project root
     },
   },
 
-  // Agent 監視
+  // Agent state monitoring
   agents: {
-    stateDir: '.kiln/agents/',
-    pollInterval: 2000,
+    stateDir: '.kiln/agents/',                 // default
+    pollInterval: 2000,                        // ms, default
   },
 
-  server: { port: 4400 },
+  server: { port: 4400 },                      // default
 });
 ```
 
----
+Notes:
 
-## プロジェクトに生成されるもの
+- Without a `pageFile`, a group preview stacks its components vertically with a
+  variant selector per component. With a `pageFile`, Kiln rewrites that page so
+  every imported group component is swapped for the selected variant.
+- Previews alias `next/image`, `next/link`, `next/navigation` and
+  `next/font/google` to plain-HTML shims, so components written for Next.js
+  render without a Next runtime.
+- `process.env` is defined as an empty object inside previews.
 
-```
-my-project/
-  ├── kiln.config.ts                      ← プロジェクト設定（自分で編集）
-  ├── tools/kiln/                         ← submodule（触らない）
-  ├── .kiln/
-  │   ├── variants/                       ← バリアントファイル（git 追跡）
-  │   ├── agents/                         ← Agent 通信（gitignore）
-  │   └── .gitignore                      ← agents/ を除外
-  ├── .claude/skills/
-  │   └── variant-review → tools/kiln/... ← symlink（git 追跡）
-  └── docs/
-      └── variant-review.json             ← レビューデータ（git 追跡）
-```
-
----
-
-## 設計思想
-
-### 役割分担
-
-```
-User          — 意思決定者
-                バリアントを見て、判定（adopt/iterate/keep/drop）を下す
-
-Kiln          — インターフェース
-                見る + 構造的にやり取りする
-                判断はしない。User の意思を構造化して伝えるだけ
-
-Claude Code   — 実行者（Leader + Agents）
-                Leader がタスクを分配し、Agent が並行してバリアントを生成する
-```
-
-### 通信チャネル
+## The review flow
 
 ```
           variant-review.json
-User ──→ Kiln ─────────────────────→ Claude Code (Leader)
+User ──→ Kiln ─────────────────────→ Claude Code (leader)
                                         │
-                                        ├── Agent 1 (iterate)
-                                        ├── Agent 2 (adopt)
-                                        └── Agent 3 (iterate)
+                                        ├── agent 1 (iterate)
+                                        ├── agent 2 (adopt)
+                                        └── agent 3 (iterate)
                                         │
           .kiln/variants/               │
 User ←── Kiln ←────────────────────────┘
-          (chokidar で自動検知)
+          (picked up by the file watcher)
 ```
 
-| チャネル | 方向 | 内容 |
-|----------|------|------|
-| `variant-review.json` | Kiln → Claude Code | User の判定・フィードバック |
-| `.kiln/variants/` | Claude Code → Kiln | 生成されたバリアントファイル |
-| `.kiln/agents/*.json` | Claude Code → Kiln | Agent の実行状態 |
+| Channel | Direction | Content |
+|---------|-----------|---------|
+| `variant-review.json` | Kiln → Claude Code | the user's decisions and feedback |
+| `.kiln/variants/` | Claude Code → Kiln | generated variant files |
+| `.kiln/agents/*.json` | Claude Code → Kiln | agent execution state (see `skills/variant-review/references/agent-protocol.md`) |
 
----
+### 1. Review in the dashboard
 
-## レビュー UI
+For each variant pick one status:
 
-### ステータス
+| Status | Meaning |
+|--------|---------|
+| `adopt` | make this variant the default implementation |
+| `iterate` | generate the next generation from this one, using your feedback |
+| `keep` | hold for now |
+| `drop` | delete the variant |
 
-| ボタン | 意味 | 色 |
-|--------|------|-----|
-| `adopt` | デフォルトに採用 | 緑 |
-| `iterate` | フィードバック付きで次世代生成 | 黄 |
-| `keep` | 保留 | 灰 |
-| `drop` | 削除 | 赤 |
+For `iterate` you can add free-text feedback and choose a mode:
 
-### iterate モード
+| Mode | Scope of change |
+|------|-----------------|
+| `auto` | inferred from the feedback text (default) |
+| `structural` | large changes: layout, colour, typography, motion |
+| `component` | change only the named `targetPart`, keep everything else |
 
-| モード | 変更範囲 |
-|--------|----------|
-| `auto` | フィードバックから自動判定（デフォルト） |
-| `structural` | レイアウト・色・タイポグラフィ等を大幅変更 |
-| `component` | targetPart のみ変更 |
+Decisions are written to `variant-review.json` with `applied: false`.
 
-### レビュー結果の適用
+### 2. Apply with the skill
 
-Claude Code に以下のように指示する：
+The `variant-review` skill (installed into `.claude/skills/`) teaches Claude
+Code how to process the file. In Claude Code, say for example:
 
 ```
-レビュー結果を適用して
+apply the review results
 ```
 
-`variant-review` skill が発動し、各判定を Agent に分配して処理する。
+Claude Code reads the pending entries, dispatches one agent per decision,
+and marks each entry `applied: true` when done. Two modes are available:
 
----
+| Mode | Trigger phrase | Behaviour |
+|------|----------------|-----------|
+| one-shot | "process pending reviews" | handle current pending entries once |
+| watch | "watch for reviews" | poll the file and process new decisions as they arrive |
 
-## 実行モード
+Agents report progress by writing `.kiln/agents/<id>.json`; Kiln polls that
+directory and shows status in the dashboard's agent panel.
 
-| モード | トリガー | 動作 |
-|--------|----------|------|
-| 逐次 | 「pending を処理して」 | Leader が pending を1回処理 |
-| Watch | 「監視して自動処理して」 | variant-review.json を監視し自動処理 |
+## Development
 
----
+Inside `tools/kiln/` (or a standalone clone):
 
-## 技術構成
+```bash
+pnpm install
+pnpm start      # run the CLI against the current directory (needs a kiln.config.ts)
+pnpm build      # tsc typecheck (Kiln runs from source via tsx, nothing is emitted)
+pnpm test       # vitest
+```
 
-| 層 | 技術 |
-|----|------|
-| Server | Express + Vite (middleware mode) |
-| Client | React (inline styles, dark theme) |
-| リアルタイム | SSE (Server-Sent Events) |
-| ファイル監視 | chokidar |
-| Agent 監視 | Oracle (polling) |
+Stack: Express + Vite in middleware mode, React client with inline styles,
+Server-Sent Events for live updates, chokidar for file watching.
+
+## License
+
+[MIT](./LICENSE)
