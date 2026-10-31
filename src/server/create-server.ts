@@ -34,6 +34,12 @@ export async function createServer(opts: {
   // Next.js shims directory
   const shimsDir = path.resolve(__dirname, '..', 'shims');
 
+  // Dashboard client entry, served by Vite relative to the project root
+  // (e.g. /tools/kiln/src/client/main.tsx when Kiln is a submodule at tools/kiln).
+  const clientMain = path.resolve(__dirname, '..', 'client', 'main.tsx');
+  const clientRel = path.relative(config.root, clientMain).split(path.sep).join('/');
+  const clientEntryUrl = clientRel.startsWith('..') ? `/@fs/${clientMain}` : `/${clientRel}`;
+
   // Resolve user aliases to absolute paths (preserve trailing slashes)
   const userAliases = Object.fromEntries(
     Object.entries(config.preview.vite?.resolve?.alias as Record<string, string> ?? {}).map(
@@ -160,7 +166,7 @@ export async function createServer(opts: {
 
   // Dashboard — serve the client SPA
   app.get('/', async (_req, res) => {
-    const html = getDashboardHtml();
+    const html = getDashboardHtml(clientEntryUrl);
     const transformed = await vite.transformIndexHtml('/', html);
     res.status(200).set('Content-Type', 'text/html').send(transformed);
   });
@@ -190,9 +196,9 @@ export async function createServer(opts: {
   };
 }
 
-function getDashboardHtml(): string {
+function getDashboardHtml(clientEntryUrl: string): string {
   return `<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -224,7 +230,7 @@ function getDashboardHtml(): string {
 </head>
 <body>
   <div id="kiln-dashboard"></div>
-  <script type="module" src="/tools/kiln/src/client/main.tsx"></script>
+  <script type="module" src="${clientEntryUrl}"></script>
 </body>
 </html>`;
 }
