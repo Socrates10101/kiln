@@ -57,8 +57,8 @@ echo ""
 
 echo "3/4  Skills & working directory"
 
-# Use npx tsx to run the TypeScript installer
-npx tsx "$KILN_DIR/src/cli.ts" install 2>&1 | grep -v "^Installing"
+# Run the TypeScript installer with Kiln's own tsx (installed in step 1)
+"$KILN_DIR/node_modules/.bin/tsx" "$KILN_DIR/src/cli.ts" install 2>&1 | grep -v "^Installing"
 echo ""
 
 # ── 4. Config scaffold ───────────────────────────────────────────────

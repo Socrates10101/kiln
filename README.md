@@ -43,8 +43,9 @@ What `install.sh` does:
 | Working dir | creates `.kiln/variants/`, `.kiln/agents/` and `.kiln/.gitignore` (ignores `agents/`) |
 | Config | scaffolds `kiln.config.ts` in the host root if it does not exist |
 
-Requirements: Node 20+, pnpm, python3 (used by the installer to compute relative paths),
-and `tsx` resolvable from the host project (`npx tsx` is used when it is not installed).
+Requirements: Node 20+, pnpm, and python3 (the installer uses it to compute
+relative paths). The generated `pnpm kiln` script runs `tsx`, so the host
+project needs it too (`pnpm add -D tsx`).
 
 After installing:
 
