@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { watch } from 'chokidar';
 import type { EventBus } from '../events/event-bus.js';
+import { parseVariantFilename } from './variant-filename.js';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -142,13 +143,10 @@ export class VariantManifest {
   }
 
   private processFile(fullPath: string, filename: string): string | null {
-    const match = filename.match(this.filenamePattern);
-    if (!match) return null;
+    const parsed = parseVariantFilename(filename, this.filenamePattern);
+    if (!parsed) return null;
 
-    const componentName = match[1];
-    const generation = parseInt(match[2], 10);
-    const slot = match[3];
-    const variantId = `v${generation}${slot}`;
+    const { component: componentName, generation, slot, variantId } = parsed;
     const relDir = path.relative(this.root, path.dirname(fullPath));
     const relFile = path.relative(this.root, fullPath);
     const name = extractVariantName(fullPath, variantId);
@@ -213,13 +211,10 @@ export class VariantManifest {
 
     this.watcher.on('unlink', (filePath) => {
       const filename = path.basename(filePath);
-      const match = filename.match(this.filenamePattern);
-      if (!match) return;
+      const parsed = parseVariantFilename(filename, this.filenamePattern);
+      if (!parsed) return;
 
-      const componentName = match[1];
-      const generation = parseInt(match[2], 10);
-      const slot = match[3];
-      const variantId = `v${generation}${slot}`;
+      const { component: componentName, variantId } = parsed;
 
       const entry = this.components.get(componentName);
       if (entry) {
