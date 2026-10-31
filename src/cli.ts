@@ -1,5 +1,7 @@
 #!/usr/bin/env tsx
 
+export {};
+
 const command = process.argv[2];
 
 if (command === 'install') {

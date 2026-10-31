@@ -27,7 +27,7 @@ export interface ComponentEntry {
   variants: Map<string, VariantInfo>;
 }
 
-// ── JSDoc name extraction patterns (from review.mjs) ──────────────────
+// ── JSDoc name extraction patterns ────────────────────────────────────
 
 const JSDOC_NAMED_RE = /\/\*\*\s*\*?\s*v\d+[a-z]:\s*(.+?)\s*\(Gen\s*\d+\)\s*\*?\s*\*\//;
 const JSDOC_SIMPLE_RE = /\/\*\*\s*\*?\s*v\d+[a-z]:\s*(.+?)\s*\*?\s*\*\//;

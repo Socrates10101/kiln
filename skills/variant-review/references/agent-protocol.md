@@ -31,7 +31,7 @@ Examples:
     "type": "iterate",
     "component": "HeroSection",
     "parentVariant": "v1a",
-    "instruction": "CTAを大きく"
+    "instruction": "Make the CTA larger"
   },
   "outputs": [],
   "startedAt": "2026-02-24T10:00:00.000Z",

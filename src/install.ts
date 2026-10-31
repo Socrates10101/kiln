@@ -85,7 +85,7 @@ function installWorkDir(projectRoot: string): void {
   // .kiln/agents/
   ensureDir(path.join(kilnDir, 'agents'));
 
-  // .kiln/.gitignore — agents/ は一時通信チャネルなので除外
+  // .kiln/.gitignore — agents/ is a transient communication channel, keep it out of git
   const gitignorePath = path.join(kilnDir, '.gitignore');
   const gitignoreContent = 'agents/\n';
 

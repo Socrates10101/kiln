@@ -3,7 +3,7 @@ import type { Plugin as VitePlugin, UserConfig as ViteUserConfig } from 'vite';
 // ── Config types ──────────────────────────────────────────────────────
 
 export interface ComponentGroup {
-  /** Display name for the group (e.g. "Homepage", "AI Security") */
+  /** Display name for the group (e.g. "Homepage", "Pricing") */
   name: string;
   /** Component names in display order */
   components: string[];

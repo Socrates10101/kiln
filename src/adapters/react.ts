@@ -27,7 +27,7 @@ export function previewShell(entryUrl: string): string {
 
 export interface FrameworkAdapter {
   name: string;
-  vitePlugins: () => Promise<import('vite').Plugin[]>;
+  vitePlugins: () => Promise<import('vite').PluginOption[]>;
   /** Generate the HTML for a preview page */
   previewHtml: (opts: { component: string; vid: string }) => string;
 }
